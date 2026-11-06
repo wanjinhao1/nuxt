@@ -30,7 +30,6 @@ import { SourcemapPreserverPlugin } from './plugins/sourcemap-preserver.ts'
 import { DevStyleSSRPlugin } from './plugins/dev-style-ssr.ts'
 import { DecoratorsPlugin } from './plugins/decorators.ts'
 import { RuntimePathsPlugin } from './plugins/runtime-paths.ts'
-import { TypeCheckPlugin } from './plugins/type-check.ts'
 import { ModulePreloadPolyfillPlugin } from './plugins/module-preload-polyfill.ts'
 import { StableEntryPlugin } from './plugins/stable-entry.ts'
 import { CompileHintsPlugin } from './plugins/compile-hints.ts'
@@ -249,8 +248,6 @@ export const bundle: NuxtBuilder['bundle'] = async (nuxt) => {
           buildAssetsURL: joinURL(nuxt.options.app.baseURL, nuxt.options.app.buildAssetsDir),
         }),
         RuntimePathsPlugin(),
-        // Type checking client panel
-        TypeCheckPlugin(nuxt),
         ModulePreloadPolyfillPlugin(),
         // ensure changes in chunks do not invalidate whole build
         StableEntryPlugin(nuxt),
