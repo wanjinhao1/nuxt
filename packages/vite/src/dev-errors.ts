@@ -1,9 +1,10 @@
 import process from 'node:process'
 import type { Nuxt } from '@nuxt/schema'
 import type { ErrorReport } from 'my-bad'
-import type { BuildProgress } from 'my-bad/channel'
+import type { BuildProgress, ProblemMeta } from 'my-bad/channel'
 import type { ViteDevServer, Plugin as VitePlugin } from 'vite'
 import { ERROR_CHANNEL_ENV, openErrorBroadcast } from 'nuxt/internal/dev-error'
+import type { ErrorChannelMessage } from 'nuxt/internal/dev-error'
 
 /** The shape Vite gives transform failures. */
 export interface ViteTransformError {
@@ -42,13 +43,15 @@ export interface DevErrorReporter {
   progress: (progress: BuildProgress) => void
   /** Report the errors open pages raise, and the compile errors Vite only sends to them. */
   attach: (server: ViteDevServer) => void
+  /** Replace the problem set for `source`. */
+  setProblems: (source: string, reports: ErrorReport[], meta?: ProblemMeta) => void
+  /** Clear the problem set for `source`. */
+  clearProblems: (source: string) => void
 }
 
 /** Turns the compile errors Vite raises into reports on the dev error channel. */
 export function createDevErrorReporter (nuxt: Nuxt, options: { print: (rendered: string) => void }): DevErrorReporter {
   const broadcast = openErrorBroadcast()
-  nuxt.hook('close', () => broadcast.close())
-
   let server: ViteDevServer | undefined
 
   let lastKey: string | undefined
@@ -60,6 +63,17 @@ export function createDevErrorReporter (nuxt: Nuxt, options: { print: (rendered:
   let publishedFile: string | undefined
   // the reports another process published that are still open
   const published = new Set<string>()
+  const problems = new Map<string, ErrorChannelMessage & { type: 'nuxt:dev:error:problems' }>()
+  let closed = false
+  // the channel can outlive this instance, and this runs before the dev server closes
+  nuxt.hook('close', () => {
+    closed = true
+    for (const source of problems.keys()) {
+      broadcast.postMessage({ type: 'nuxt:dev:error:problems:clear', source } satisfies ErrorChannelMessage)
+    }
+    problems.clear()
+    broadcast.close()
+  })
   // the same failure reaches the logger and the hot channel worded differently, at one position
   const keyOf = (error: ViteTransformError) => [error.loc?.file ?? error.id, error.loc?.line, error.loc?.column, error.loc ? '' : error.message].join(':')
 
@@ -69,6 +83,9 @@ export function createDevErrorReporter (nuxt: Nuxt, options: { print: (rendered:
       case 'nuxt:dev:error:sync':
         if (current) {
           broadcast.postMessage({ type: 'nuxt:dev:error:report', report: current, requestId: runtimeRequestId })
+        }
+        for (const message of problems.values()) {
+          broadcast.postMessage(message)
         }
         return
       // a compile error is remembered by file, so fixing the file clears it;
@@ -147,6 +164,19 @@ export function createDevErrorReporter (nuxt: Nuxt, options: { print: (rendered:
     },
     progress (progress) {
       broadcast.postMessage({ type: 'nuxt:dev:error:progress', progress })
+    },
+    setProblems (source, reports, meta) {
+      if (closed) {
+        return
+      }
+      const message = { type: 'nuxt:dev:error:problems' as const, source, reports, meta }
+      problems.set(source, message)
+      broadcast.postMessage(message)
+    },
+    clearProblems (source) {
+      if (problems.delete(source)) {
+        broadcast.postMessage({ type: 'nuxt:dev:error:problems:clear', source } satisfies ErrorChannelMessage)
+      }
     },
     attach (devServer) {
       server = devServer
