@@ -37,6 +37,8 @@ export type ErrorChannelMessage =
   | { type: 'nuxt:dev:error:problems', source: string, reports: ErrorReport[], meta?: ProblemMeta }
   /** Clears the problem set for `source`, or every set without one. */
   | { type: 'nuxt:dev:error:problems:clear', source?: string }
+  /** Whether a my-bad dock is registered in Vite DevTools. */
+  | { type: 'nuxt:dev:error:devtools', registered: boolean }
 
 const CHANNEL_KEY = Symbol.for('nuxt:dev:error-channel')
 
@@ -99,6 +101,8 @@ function createOwnedChannel (channel: Channel): Channel {
         return channel.setProblems(message.source, message.reports, message.meta)
       case 'nuxt:dev:error:problems:clear':
         return channel.clearProblems(message.source)
+      case 'nuxt:dev:error:devtools':
+        return channel.setDevTools(message.registered)
     }
   }
   post({ type: 'nuxt:dev:error:sync' })
@@ -158,6 +162,9 @@ function createForwardingChannel (): Channel {
     },
     clearProblems (source) {
       post({ type: 'nuxt:dev:error:problems:clear', source })
+    },
+    setDevTools (registered) {
+      post({ type: 'nuxt:dev:error:devtools', registered })
     },
     get current () {
       return current
@@ -305,7 +312,7 @@ export async function renderDevBadge (options: { cwd?: string, channel: string, 
   const requestId = requestIdOf(options.request) ?? crypto.randomUUID()
   const state = JSON.stringify({ requestId }).replaceAll('<', '\\u003c')
   return `<script>window.__NUXT_DEV_ERROR__=${state};addEventListener('my-bad:error:clear',()=>__NUXT_DEV_ERROR__.recovers?.()||location.reload())</script>`
-    + renderBadge({ channel: options.channel, cwd: options.cwd, theme: nuxtTheme, tag: 'nuxt-error-overlay', requestId })
+    + renderBadge({ channel: options.channel, cwd: options.cwd, theme: nuxtTheme, tag: 'nuxt-error-overlay', requestId, awaitHost: 500 })
 }
 
 /** Render a standalone error page, for when the app itself cannot render one. */

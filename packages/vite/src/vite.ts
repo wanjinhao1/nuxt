@@ -16,7 +16,7 @@ import { ssr, ssrEnvironment } from './shared/server.ts'
 import { clientEnvironment } from './shared/client.ts'
 import { resolveCSSOptions } from './css.ts'
 import { createViteLogger, logLevelMap } from './utils/logger.ts'
-import { DevErrorsPlugin, createDevErrorReporter, isTransformError } from './dev-errors.ts'
+import { DevErrorsDevToolsPlugin, DevErrorsPlugin, createDevErrorReporter, isTransformError } from './dev-errors.ts'
 import { getAncestorModulesDirs, removeNestedDirs, sanitizeFilePath } from './utils/index.ts'
 import { OptimizeDepsHintPlugin, optimizerCallbacks, userOptimizeDepsInclude } from './plugins/optimize-deps-hint.ts'
 
@@ -309,7 +309,7 @@ export const bundle: NuxtBuilder['bundle'] = async (nuxt) => {
   config.configFile = false
   if (devErrors) {
     const { CheckerBridgePlugin } = await import('./checker-bridge.ts')
-    config.plugins!.push(DevErrorsPlugin(devErrors), CheckerBridgePlugin(devErrors))
+    config.plugins!.push(DevErrorsPlugin(devErrors), await DevErrorsDevToolsPlugin(nuxt, devErrors), CheckerBridgePlugin(devErrors))
   }
 
   for (const environment of ['client', 'ssr']) {
