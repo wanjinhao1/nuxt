@@ -3,7 +3,7 @@
  *
  * @module nuxt/internal/dev-error
  */
-import type { BuildProgress, Channel, LogEntry } from 'my-bad/channel'
+import type { BuildProgress, Channel, LogEntry, ProblemMeta } from 'my-bad/channel'
 import type { ErrorReport, SourceLoader } from 'my-bad'
 import type { SerializedErrorCause } from '#app/types'
 
@@ -32,6 +32,10 @@ export type ErrorChannelMessage =
   | { type: 'nuxt:dev:error:log', entry: LogEntry }
   | { type: 'nuxt:dev:error:warning', report: ErrorReport }
   | { type: 'nuxt:dev:error:progress', progress: BuildProgress }
+  /** Replaces the problem set for `source`. */
+  | { type: 'nuxt:dev:error:problems', source: string, reports: ErrorReport[], meta?: ProblemMeta }
+  /** Clears the problem set for `source`, or every set without one. */
+  | { type: 'nuxt:dev:error:problems:clear', source?: string }
 
 const CHANNEL_KEY = Symbol.for('nuxt:dev:error-channel')
 
@@ -88,6 +92,10 @@ function createOwnedChannel (channel: Channel): Channel {
         return channel.warn(message.report)
       case 'nuxt:dev:error:progress':
         return channel.progress(message.progress)
+      case 'nuxt:dev:error:problems':
+        return channel.setProblems(message.source, message.reports, message.meta)
+      case 'nuxt:dev:error:problems:clear':
+        return channel.clearProblems(message.source)
     }
   }
   post({ type: 'nuxt:dev:error:sync' })
@@ -109,6 +117,9 @@ function createOwnedChannel (channel: Channel): Channel {
     },
     get history () {
       return channel.history
+    },
+    get problems () {
+      return channel.problems
     },
   }
 }
@@ -136,10 +147,19 @@ function createForwardingChannel (): Channel {
     progress (progress) {
       post({ type: 'nuxt:dev:error:progress', progress })
     },
+    setProblems (source, reports, meta) {
+      post({ type: 'nuxt:dev:error:problems', source, reports, meta })
+    },
+    clearProblems (source) {
+      post({ type: 'nuxt:dev:error:problems:clear', source })
+    },
     get current () {
       return current
     },
     history: [],
+    historyFor: () => [],
+    problems: [],
+    subscribe: () => () => {},
     getReport: () => undefined,
     clients: 0,
     close () {
