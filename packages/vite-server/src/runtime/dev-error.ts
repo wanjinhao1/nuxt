@@ -1,8 +1,8 @@
 import type { ViteDevServer } from 'vite'
 import type { ViteHotContext } from 'vite/types/hot.d.ts'
 import type { ErrorReport } from 'my-bad'
-import { ERROR_CHANNEL_ENV, clearErrorReport as clearChannelReport, createDevErrorReporter, createErrorReport, renderDevBadge as renderBadge, serializeErrorCause, setErrorChannelForwarding, useErrorChannel } from 'nuxt/internal/dev-error'
-import type { DevErrorObserveOptions, DevErrorReport, SerializedErrorCause } from 'nuxt/internal/dev-error'
+import { ERROR_CHANNEL_ENV, clearErrorReport as clearChannelReport, createDevErrorReporter, createErrorReport, renderDevBadge as renderBadge, serializeErrorCause, setErrorChannelAccess, setErrorChannelForwarding, useErrorChannel } from 'nuxt/internal/dev-error'
+import type { DevErrorAccess, DevErrorObserveOptions, DevErrorReport, SerializedErrorCause } from 'nuxt/internal/dev-error'
 import { isLoopbackAddress } from 'nuxt/internal/dev/peer'
 
 import { REMOTE_DEV_ERROR_CLEAR_EVENT, REMOTE_DEV_ERROR_EVENT, REMOTE_DEV_ERROR_REPORT_EVENT } from './remote-dev-error.ts'
@@ -16,6 +16,8 @@ export interface DevErrorContext {
   cwd: string
   /** Base path the live channel is reachable at. */
   channel: string
+  /** What reports may read, and which hosts may reach the channel. */
+  access: DevErrorAccess
 }
 
 let context: DevErrorContext | undefined
@@ -32,6 +34,7 @@ setErrorChannelForwarding(forwarding)
 /** Install the dev server the app renders from. */
 export function setDevErrorContext (next: DevErrorContext): void {
   context = next
+  setErrorChannelAccess(next.access)
   // opened eagerly so it is listening for the bundler's compile errors
   useErrorChannel().catch(() => {})
 }
@@ -133,6 +136,7 @@ async function buildReport (error: unknown, request?: Request): Promise<ErrorRep
     cwd: context!.cwd,
     // sources are read by the filesystem loader the report adds after this one
     loaders: [viteLoader(ssrOnly(context!.server), { fs: false })],
+    roots: context!.access.roots,
     context: { request },
   })
 }

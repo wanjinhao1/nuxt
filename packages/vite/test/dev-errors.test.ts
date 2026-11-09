@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'pathe'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -15,10 +15,19 @@ const transformError = {
   frame: '6  |    <div\n7  |      Nuxt Playground\n8  |    </div>\n   |      ^\n',
 }
 
-function createNuxt () {
+function createNuxt (layers: string[] = []) {
   const hooks: Record<string, () => void> = {}
   return {
-    options: { rootDir: '/src', app: { baseURL: '/' }, devServer: { errorChannel: '/__nuxt_dev__/error' } },
+    options: {
+      rootDir: '/src',
+      srcDir: '/src/app',
+      workspaceDir: '/src',
+      buildDir: '/src/.nuxt',
+      modulesDir: ['/src/node_modules'],
+      _layers: layers.map(rootDir => ({ config: { rootDir, srcDir: join(rootDir, 'app') } })),
+      app: { baseURL: '/' },
+      devServer: { errorChannel: '/__nuxt_dev__/error' },
+    },
     hook: (name: string, fn: () => void) => { hooks[name] = fn },
     close: () => hooks.close?.(),
   } as unknown as Nuxt & { close: () => void }
@@ -100,6 +109,25 @@ describe('createDevErrorReporter', () => {
     expect(print).toHaveBeenCalledWith(transformError.message)
 
     nuxt.close()
+  })
+
+  it('shows the source of a compile error in a layer outside the project', async () => {
+    const layer = mkdtempSync(join(tmpdir(), 'nuxt-layer-'))
+    const file = join(layer, 'app', 'broken.vue')
+    mkdirSync(join(layer, 'app'))
+    writeFileSync(file, '<template>\n  <div>\n</template>\n')
+    const error = { message: 'Element is missing end tag.', plugin: 'vite:vue', id: file, loc: { file, line: 2, column: 3 } }
+
+    const outside = createNuxt()
+    expect((await createDevErrorReporter(outside, { print: () => {} }).report(error))?.frames[0]?.snippet).toBeUndefined()
+    outside.close()
+
+    const nuxt = createNuxt([layer])
+    const report = await createDevErrorReporter(nuxt, { print: () => {} }).report(error)
+    expect(report?.frames[0]?.snippet?.lines).toContain('  <div>')
+
+    nuxt.close()
+    rmSync(layer, { recursive: true, force: true })
   })
 
   it('leaves showing a report to the channel open pages listen to', async () => {

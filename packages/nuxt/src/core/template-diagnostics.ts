@@ -4,7 +4,7 @@ import { hash } from 'ohash'
 import type { CompilerOptions } from '@vue/compiler-core'
 import type { Diagnostic } from 'nostics'
 import type { Component, Nuxt } from 'nuxt/schema'
-import { openErrorBroadcast } from '../runtime/server/dev-error/index.ts'
+import { openErrorBroadcast, resolveDevErrorAccess } from '../runtime/server/dev-error/index.ts'
 import type { ErrorChannelMessage } from '../runtime/server/dev-error/index.ts'
 import { createTemplateDiagnostics } from './plugins/template-diagnostics.ts'
 
@@ -94,8 +94,13 @@ function createWarningPublisher (nuxt: Nuxt) {
     const id = hash(finding)
     raised.set(id, (raised.get(id) ?? 0) + 1)
     enqueue(async () => {
-      const [{ createReport }, { nuxtPreset }] = await Promise.all([import('my-bad'), import('my-bad/presets')])
-      const report = await createReport(diagnostic, { cwd: nuxt.options.rootDir, kind: 'warning', presets: [nuxtPreset()] })
+      const [{ createReport, fsLoader }, { nuxtPreset }] = await Promise.all([import('my-bad'), import('my-bad/presets')])
+      const report = await createReport(diagnostic, {
+        cwd: nuxt.options.rootDir,
+        kind: 'warning',
+        loaders: [fsLoader({ roots: resolveDevErrorAccess(nuxt.options).roots })],
+        presets: [nuxtPreset()],
+      })
       post({ type: 'nuxt:dev:error:warning', report: { ...report, id } })
     })
   }

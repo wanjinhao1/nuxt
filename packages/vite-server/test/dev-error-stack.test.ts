@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 vi.mock('nuxt/internal/dev-error', () => ({
   ERROR_CHANNEL_ENV: 'NUXT_DEV_ERROR_CHANNEL',
   setErrorChannelForwarding: () => {},
+  setErrorChannelAccess: () => {},
   useErrorChannel: () => Promise.resolve({ fetchHandler: () => undefined }),
   createErrorReport: () => Promise.resolve({}),
   createDevErrorReporter: (options: { mapStack: (error: unknown) => void }) => (error: unknown) => {
@@ -18,6 +19,7 @@ setDevErrorContext({
   server: { ssrFixStacktrace: (error: Error) => { error.stack = error.stack!.replace('/.nuxt/app.mjs:1:1', '/app.vue:12:3') } } as never,
   cwd: '/repo',
   channel: '/__nuxt_dev__/error',
+  access: { roots: ['/repo'], allowedHosts: [] },
 })
 
 const raised = 'Error: boom\n    at setup (/repo/.nuxt/app.mjs:1:1)'

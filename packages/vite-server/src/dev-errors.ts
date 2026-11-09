@@ -1,6 +1,6 @@
 import process from 'node:process'
 import type { Nuxt } from '@nuxt/schema'
-import { ERROR_CHANNEL_ENV, clearErrorReport, createDevErrorReporter, createErrorReport, setErrorChannelForwarding } from 'nuxt/internal/dev-error'
+import { ERROR_CHANNEL_ENV, clearErrorReport, createDevErrorReporter, createErrorReport, resolveDevErrorAccess, setErrorChannelAccess, setErrorChannelForwarding } from 'nuxt/internal/dev-error'
 import type { ViteDevServer } from 'vite'
 
 import { REMOTE_DEV_ERROR_CLEAR_EVENT, REMOTE_DEV_ERROR_EVENT, REMOTE_DEV_ERROR_REPORT_EVENT, deserializeError } from './runtime/remote-dev-error.ts'
@@ -13,12 +13,14 @@ import type { RemoteDevError, RemoteDevErrorReport } from './runtime/remote-dev-
 export function listenForRemoteDevErrors (nuxt: Nuxt, server: ViteDevServer, channel: string): void {
   const forwarding = () => !!process.env[ERROR_CHANNEL_ENV]
   setErrorChannelForwarding(forwarding)
+  const access = resolveDevErrorAccess(nuxt.options)
+  setErrorChannelAccess(access)
   const channelPath = () => process.env[ERROR_CHANNEL_ENV] || channel
 
   const observe = createDevErrorReporter<NonNullable<RemoteDevError['request']>>({
     cwd: nuxt.options.rootDir,
     channel: channelPath,
-    createReport: (error, request) => createErrorReport(error, { cwd: nuxt.options.rootDir, context: { request } }),
+    createReport: (error, request) => createErrorReport(error, { cwd: nuxt.options.rootDir, roots: access.roots, context: { request } }),
     requestInfo: request => ({ method: request.method, url: new URL(request.url), headers: new Headers(request.headers) }),
   })
 

@@ -9,6 +9,7 @@ import type { Nuxt, NuxtBuildOutputs, NuxtOptions, ServerApi, ServerImportsOptio
 import { dirname, join, relative, resolve } from 'pathe'
 import { joinURL, withTrailingSlash, withoutTrailingSlash } from 'ufo'
 import nuxtPkg from 'nuxt/package.json' with { type: 'json' }
+import { resolveDevErrorAccess } from 'nuxt/internal/dev-error'
 import { createNitro } from 'nitro/builder'
 import type { Nitro, NitroOptions as NitroBuilderOptions, NitroConfig } from 'nitro/types'
 import { addPlugin, addTemplate, addVitePlugin, ensureDependencyInstalled, findPath, getAddDependencyCommand, getDirectory, getLayerDirectories, packageName, resolveAlias, resolveIgnorePatterns, resolveNuxtModule, resolveTypePaths } from '@nuxt/kit'
@@ -136,6 +137,7 @@ export async function bundle (nuxt: Nuxt & { _nitro?: Nitro }): Promise<void> {
       '#internal/dev-server-logs-options': () => [
         `export const rootDir = ${JSON.stringify(nuxt.options.rootDir)};`,
         `export const srcDir = ${JSON.stringify(nuxt.options.srcDir)};`,
+        `export const devErrorAccess = ${JSON.stringify(resolveDevErrorAccess(nuxt.options))};`,
       ].join('\n'),
     })
     addPlugin(resolve(nuxt.options.appDir, 'plugins/dev-error-overlay.client'))

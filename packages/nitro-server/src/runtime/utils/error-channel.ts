@@ -7,7 +7,7 @@ import { isMainThread } from 'node:worker_threads'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import process from 'node:process'
-import { rootDir, srcDir } from '#internal/dev-server-logs-options'
+import { devErrorAccess, rootDir, srcDir } from '#internal/dev-server-logs-options'
 import * as devError from 'nuxt/internal/dev-error'
 
 import { NUXT_ERROR_CHANNEL } from '#internal/nuxt/nitro-config.mjs'
@@ -30,6 +30,7 @@ export function getErrorChannelPath (): string {
 }
 
 devError.setErrorChannelForwarding(() => shouldForwardReports())
+devError.setErrorChannelAccess(devErrorAccess)
 
 /** The live error channel, forwarding to the dev server in front when there is one. */
 export function useErrorChannel (): Promise<Channel> {
@@ -56,6 +57,7 @@ export function createErrorReport (error: unknown, event?: H3Event): Promise<Err
   return devError.createErrorReport(error, {
     cwd: rootDir,
     loaders: ssrSourceMaps ? [compiledPositionLoader(ssrSourceMaps)] : [],
+    roots: devErrorAccess.roots,
     context: { event },
   })
 }

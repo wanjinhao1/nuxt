@@ -6,6 +6,7 @@
 import type { BuildProgress, Channel, LogEntry, ProblemMeta } from 'my-bad/channel'
 import type { ErrorReport, SourceLoader } from 'my-bad'
 import type { SerializedErrorCause } from '#app/types'
+import type { NuxtOptions } from 'nuxt/schema'
 
 export type { SerializedErrorCause } from '#app/types'
 
@@ -52,12 +53,42 @@ export function setErrorChannelForwarding (forward: () => boolean): void {
   isForwarding = forward
 }
 
+/** What a dev error report may read, and which hosts may reach the channel. */
+export interface DevErrorAccess {
+  /** Directories sources are read from, and "open in editor" may open. */
+  roots: string[]
+  /** Hosts a browser may address the channel through, besides loopback ones. */
+  allowedHosts: string[] | true
+}
+
+/** The project's directories and configured dev hosts, for {@link setErrorChannelAccess} and report `roots`. */
+export function resolveDevErrorAccess (options: Pick<NuxtOptions, 'rootDir' | 'srcDir' | 'serverDir' | 'workspaceDir' | 'buildDir' | 'modulesDir' | '_layers' | 'devServer' | 'vite'>): DevErrorAccess {
+  const layerDirs = options._layers.flatMap(layer => [layer.config.rootDir, layer.config.srcDir, layer.config.serverDir])
+  const roots = new Set([options.rootDir, options.srcDir, options.serverDir, options.workspaceDir, options.buildDir, ...layerDirs, ...options.modulesDir])
+  const hosts = [options.devServer.allowedHosts, options.vite?.server?.allowedHosts]
+  return {
+    roots: [...roots].filter((dir): dir is string => !!dir),
+    allowedHosts: hosts.includes(true) ? true : [...new Set(hosts.flatMap(host => Array.isArray(host) ? host : []))],
+  }
+}
+
+let channelAccess: Partial<DevErrorAccess> = {}
+
+/** Confine the channel this process owns. Read when the channel is first used. */
+export function setErrorChannelAccess (access: Partial<DevErrorAccess>): void {
+  channelAccess = access
+}
+
 /** The live error channel, forwarding to the dev server in front when there is one. */
 export function useErrorChannel (): Promise<Channel> {
   const store = globalThis as { [CHANNEL_KEY]?: Promise<Channel> }
   store[CHANNEL_KEY] ||= isForwarding()
     ? Promise.resolve(createForwardingChannel())
-    : import('my-bad/channel').then(({ createChannel }) => createOwnedChannel(createChannel({ open: true })))
+    : import('my-bad/channel').then(({ createChannel }) => createOwnedChannel(createChannel({
+        open: true,
+        root: channelAccess.roots,
+        allowedHosts: channelAccess.allowedHosts,
+      })))
   return store[CHANNEL_KEY]
 }
 
@@ -253,6 +284,8 @@ export interface ErrorReportOptions {
   cwd: string
   /** Loaders resolving a frame to its source. A filesystem fallback is added last. */
   loaders?: SourceLoader[]
+  /** Directories the filesystem fallback may read. Defaults to `cwd`. */
+  roots?: string[]
   /** Context the report's presets read. */
   context?: Record<string, unknown>
 }
@@ -268,7 +301,7 @@ export async function createErrorReport (error: unknown, options: ErrorReportOpt
   ])
   return withoutEchoingCauses(await createReport(error, {
     cwd: options.cwd,
-    loaders: [...options.loaders ?? [], fsLoader()],
+    loaders: [...options.loaders ?? [], fsLoader({ roots: options.roots ?? [options.cwd] })],
     presets: [nuxtPreset()],
     context: { ...thrownContext(error), ...options.context },
   }))

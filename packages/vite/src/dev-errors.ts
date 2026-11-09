@@ -4,7 +4,7 @@ import type { ErrorReport } from 'my-bad'
 import type { BuildProgress, ProblemMeta } from 'my-bad/channel'
 import type { ViteDevServer, Plugin as VitePlugin } from 'vite'
 import { joinURL } from 'ufo'
-import { ERROR_CHANNEL_ENV, openErrorBroadcast } from 'nuxt/internal/dev-error'
+import { ERROR_CHANNEL_ENV, openErrorBroadcast, resolveDevErrorAccess } from 'nuxt/internal/dev-error'
 import type { ErrorChannelMessage } from 'nuxt/internal/dev-error'
 
 /** The shape Vite gives transform failures. */
@@ -140,8 +140,13 @@ export function createDevErrorReporter (nuxt: Nuxt, options: { print: (rendered:
       publishedFile = undefined
       file = (error.loc?.file ?? error.id)?.split('?')[0]
       try {
-        const [{ createReport, renderAnsi }, { nuxtPreset }] = await Promise.all([import('my-bad'), import('my-bad/presets')])
-        const report = await createReport(error, { cwd: nuxt.options.rootDir, kind: 'compile', presets: [nuxtPreset()] })
+        const [{ createReport, fsLoader, renderAnsi }, { nuxtPreset }] = await Promise.all([import('my-bad'), import('my-bad/presets')])
+        const report = await createReport(error, {
+          cwd: nuxt.options.rootDir,
+          kind: 'compile',
+          loaders: [fsLoader({ roots: resolveDevErrorAccess(nuxt.options).roots })],
+          presets: [nuxtPreset()],
+        })
         current = report
         broadcast.postMessage({ type: 'nuxt:dev:error:report', report })
         if (!process.env[ERROR_CHANNEL_ENV]) {

@@ -13,6 +13,7 @@ const { paths } = vi.hoisted(() => ({ paths: { rootDir: '/app', srcDir: '/app/ap
 vi.mock('#internal/dev-server-logs-options', () => ({
   get rootDir () { return paths.rootDir },
   get srcDir () { return paths.srcDir },
+  get devErrorAccess () { return { roots: [paths.rootDir, paths.srcDir], allowedHosts: [] } },
 }))
 vi.mock('node:worker_threads', () => ({ isMainThread: false }))
 
@@ -81,6 +82,7 @@ describe('createErrorReport', () => {
 
   it('recovers the compiled position of frames whose stack is already mapped', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'nuxt-error-report-'))
+    paths.srcDir = dir
     const file = join(dir, 'useBoom.ts')
     await writeFile(file, 'export function useBoom () {\n  throw new Error("boom")\n}\n')
     const code = 'const wrapper = 1\nconst wrapper2 = 2\nexport function useBoom () {\n  throw new Error("boom")\n}\n'
@@ -96,6 +98,17 @@ describe('createErrorReport', () => {
     expect(report.frames[0]).toMatchObject({ file, line: 2, column: 9, compiled: { file, line: 4, column: 9 } })
     expect(report.frames[0]!.snippet?.lines).toContain('  throw new Error("boom")')
     expect(report.frames[0]!.compiled?.snippet?.lines).toContain('const wrapper2 = 2')
+  })
+
+  it('reads no source outside the project', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'nuxt-error-outside-'))
+    const file = join(dir, 'useBoom.ts')
+    await writeFile(file, 'export function useBoom () {\n  throw new Error("boom")\n}\n')
+
+    const report = await createErrorReport(Object.assign(new Error('boom'), { stack: `Error: boom\n    at useBoom (${file}:2:9)` }))
+
+    expect(report.frames[0]).toMatchObject({ file, line: 2 })
+    expect(report.frames[0]!.snippet).toBeUndefined()
   })
 })
 
